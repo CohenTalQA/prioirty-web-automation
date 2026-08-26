@@ -1,0 +1,27 @@
+{
+  "name": "playwright-framework-template",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Reusable Playwright and TypeScript test automation template.",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:sanity": "playwright test tests/sanity",
+    "test:chromium": "playwright test --project=chromium",
+    "test:headed": "playwright test --headed --project=chromium",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug --project=chromium",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run test:sanity",
+    "report": "playwright show-report"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.2.0",
+    "dotenv": "^17.4.2",
+    "typescript": "^7.0.2"
+  }
+}
