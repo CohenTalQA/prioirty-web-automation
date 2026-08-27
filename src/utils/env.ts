@@ -11,7 +11,7 @@ export const env = {
   username: (process.env.APP_USERNAME ?? process.env.E2E_USERNAME)?.trim(),
   password: process.env.APP_PASSWORD ?? process.env.E2E_PASSWORD,
   provider: process.env.PROVIDER?.trim(),
-  providerPassword: process.env.PROVIDAR_PASSWORD,
+  providerPassword: process.env.PROVIDER_PASSWORD ?? process.env.PROVIDAR_PASSWORD,
   branch: process.env.BRANCH?.trim(),
   customerId: process.env.CUSTOMER_ID?.trim(),
   treatmentName: process.env.TREATMENT_NAME?.trim(),

@@ -1,21 +1,10 @@
 // spec: specs/grant-doctor-permissions.plan.md
-// seed: tests/seed.spec.ts
 
-import type { Locator } from '@playwright/test';
 import { expect, test } from '../../src/fixtures/test-fixtures.js';
 import { env, requireEnv } from '../../src/utils/env.js';
+import { clearObstructions, dismissIfShown, signIn } from '../../src/helpers/auth.js';
 
 const PROCEDURE_NAME = 'עדכון קבוצת הרשאות למשתמש';
-
-// Startup popups are optional; click the button only if its popup shows up in time
-async function dismissIfShown(button: Locator, timeout: number): Promise<void> {
-  try {
-    await button.waitFor({ state: 'visible', timeout });
-    await button.click();
-  } catch {
-    // popup was not shown - nothing to dismiss
-  }
-}
 
 test.describe('Admin grants doctor permissions', () => {
   test('Grant doctor permission group to provider user', async ({
@@ -29,47 +18,17 @@ test.describe('Admin grants doctor permissions', () => {
     const provider = requireEnv(env.provider, 'PROVIDER');
     const permissionGroup = process.env.PERMISSION_GROUP ?? 'doctor';
 
-    // 1. Navigate to BASE_URL and wait for the login form
-    await loginPage.goto();
-    await loginPage.expectLoaded();
-
-    // 2. Login with the admin user (APP_USERNAME / APP_PASSWORD)
-    await loginPage.login(username, password);
-
-    // 3. Dismiss the blocking message dialog if shown (it intercepts clicks on the other popups)
+    // 1. Log in as the admin user and clear the startup popups
+    await signIn(page, loginPage, username, password);
     const messageDialog = page.locator('#pui-common-message-dialog');
-    await dismissIfShown(
-      messageDialog.getByRole('button', { name: 'אישור' }),
-      30_000
-    );
 
-    // 4. Confirm Hebrew in the language popup if shown (it is a priModalDialog too)
-    const languageDialog = page
-      .locator('div.priModalDialog')
-      .filter({ hasText: 'שפה Language' });
-    await dismissIfShown(
-      languageDialog.getByRole('button', { name: 'אישור' }),
-      10_000
-    );
-
-    // 5. Dismiss the announcements popup with "לא תודה" if shown (can appear late)
-    await dismissIfShown(page.getByRole('button', { name: 'לא תודה' }), 15_000);
-
-    // 6. Verify the dashboard is visible with the admin username
-    await expect(page.getByText(username, { exact: true })).toBeVisible({
-      timeout: 60_000,
-    });
-
-    // 7. Open the menu search via the magnifier icon (no accessible name; id is the only stable hook),
+    // 2. Open the menu search via the magnifier icon (no accessible name; id is the only stable hook),
     //    retrying if a late popup steals the click
     const searchDialog = page
       .locator('div.priModalDialog')
       .filter({ hasText: 'חיפוש בתפריט' });
     await expect(async () => {
-      await dismissIfShown(
-        page.getByRole('button', { name: 'לא תודה' }),
-        1_000
-      );
+      await clearObstructions(page);
       await page.locator('#searchbottomHeader').click();
       await expect(searchDialog).toBeVisible({ timeout: 5_000 });
     }).toPass({ timeout: 60_000 });
@@ -123,8 +82,5 @@ test.describe('Admin grants doctor permissions', () => {
     await expect(searchDialog).toBeHidden();
     await expect(paramsDialog).toBeHidden();
     await expect(messageDialog).toBeHidden();
-
-    // Manual review pause - inspect the result in headed Chromium before finishing
-    await page.pause();
   });
 });

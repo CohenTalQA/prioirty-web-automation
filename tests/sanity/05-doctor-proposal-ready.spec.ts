@@ -1,23 +1,13 @@
 // spec: doctor flow - change clinic, open customer, create proposal, mark it ready
-// seed: tests/seed.spec.ts
 
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../../src/fixtures/test-fixtures.js';
 import { env, requireEnv } from '../../src/utils/env.js';
+import { clearObstructions, dismissIfShown, signIn } from '../../src/helpers/auth.js';
 
 // GWT form fields carry no accessible names; the label lives in the adjacent cell div[title]
 function labeledField(page: Page, label: string): Locator {
   return page.locator(`td:has(> div[title="${label}"]) + td input`).first();
-}
-
-// Startup popups are optional; click the button only if its popup shows up in time
-async function dismissIfShown(button: Locator, timeout: number): Promise<void> {
-  try {
-    await button.waitFor({ state: 'visible', timeout });
-    await button.click();
-  } catch {
-    // popup was not shown - nothing to dismiss
-  }
 }
 
 function todayShort(): string {
@@ -35,7 +25,7 @@ test.describe('Doctor proposal flow', () => {
   }) => {
     test.setTimeout(420_000);
     const provider = requireEnv(env.provider, 'PROVIDER');
-    const providerPassword = requireEnv(env.providerPassword, 'PROVIDAR_PASSWORD');
+    const providerPassword = requireEnv(env.providerPassword, 'PROVIDER_PASSWORD');
     const branch = requireEnv(env.branch, 'BRANCH');
     const customerId = requireEnv(env.customerId, 'CUSTOMER_ID');
     const treatmentCode = requireEnv(env.treatmentName, 'TREATMENT_NAME');
@@ -43,35 +33,14 @@ test.describe('Doctor proposal flow', () => {
     const today = todayShort();
 
     const messageDialog = page.locator('#pui-common-message-dialog');
-    const lateAnnouncements = page.getByRole('button', { name: 'לא תודה' });
     const currentField = page.locator('input.priCurrentFieldStyle');
 
-    const clearObstructions = async (): Promise<void> => {
-      await dismissIfShown(lateAnnouncements, 500);
-      await dismissIfShown(messageDialog.getByRole('button', { name: 'אישור' }), 500);
-    };
+    // 1. Log in as the doctor user and clear the startup popups
+    await signIn(page, loginPage, provider, providerPassword);
 
-    // 1. Login with the doctor user (PROVIDER / PROVIDAR_PASSWORD)
-    await loginPage.goto();
-    await loginPage.expectLoaded();
-    await loginPage.login(provider, providerPassword);
-
-    // 2. Dismiss the blocking message dialog if shown
-    await dismissIfShown(messageDialog.getByRole('button', { name: 'אישור' }), 30_000);
-
-    // 3. Confirm Hebrew in the language popup if shown
-    const languageDialog = page.locator('div.priModalDialog').filter({ hasText: 'שפה Language' });
-    await dismissIfShown(languageDialog.getByRole('button', { name: 'אישור' }), 10_000);
-
-    // 4. Dismiss the announcements popup if shown (can appear late)
-    await dismissIfShown(lateAnnouncements, 15_000);
-
-    // 5. Verify the dashboard is visible with the doctor username
-    await expect(page.getByText(provider, { exact: true })).toBeVisible({ timeout: 60_000 });
-
-    // 6. Click change-clinic in the main navigation, retrying if a late popup steals the click
+    // 2. Click change-clinic in the main navigation, retrying if a late popup steals the click
     await expect(async () => {
-      await clearObstructions();
+      await clearObstructions(page);
       await page.getByRole('navigation').getByRole('link', { name: 'שינוי מרפאה' }).click({ timeout: 5_000 });
     }).toPass({ timeout: 60_000 });
 
@@ -94,7 +63,7 @@ test.describe('Doctor proposal flow', () => {
     await expect(messageDialog).toBeHidden();
     // 10. Open the menu search via the magnifier icon (id is the only stable hook)
     const searchDialog = page.locator('div.priModalDialog').filter({ hasText: 'חיפוש בתפריט' });
-    await clearObstructions();
+    await clearObstructions(page);
     await page.locator('#searchbottomHeader').click();
     await expect(searchDialog).toBeVisible({ timeout: 30_000 });
     // 11. Search for the customers screen and select the exact match
@@ -119,7 +88,7 @@ test.describe('Doctor proposal flow', () => {
     await expect(labeledField(page, 'ת.בדיקת זכאות אחרונה')).toHaveValue(today, { timeout: 30_000 });    // 16. Open the actions list with Ctrl+F5 and launch the proposal action via keyboard
     const actionsDialog = page.getByRole('dialog').filter({ hasText: 'פעולות' });
     await expect(async () => {
-      await clearObstructions();
+      await clearObstructions(page);
       await page.keyboard.press('Control+F5');
       await expect(actionsDialog).toBeVisible({ timeout: 10_000 });
     }).toPass({ timeout: 60_000 });
@@ -141,7 +110,7 @@ test.describe('Doctor proposal flow', () => {
     // 18. Open the child screens list with F5 and enter the proposals child screen
     const childScreensDialog = page.getByRole('dialog').filter({ hasText: 'מסכי בן' });
     await expect(async () => {
-      await clearObstructions();
+      await clearObstructions(page);
       await page.keyboard.press('F5');
       await expect(childScreensDialog).toBeVisible({ timeout: 10_000 });
     }).toPass({ timeout: 60_000 });
@@ -165,7 +134,7 @@ test.describe('Doctor proposal flow', () => {
     // 21. Descend to the detail child screen with F12
     const detailTitle = page.getByRole('heading', { name: 'הצעת מחיר ללקוח - פירוט', exact: true });
     await expect(async () => {
-      await clearObstructions();
+      await clearObstructions(page);
       await currentField.press('F12');
       await expect(detailTitle).toBeVisible({ timeout: 10_000 });
     }).toPass({ timeout: 60_000 });
@@ -179,22 +148,22 @@ test.describe('Doctor proposal flow', () => {
     await dismissIfShown(messageDialog.getByRole('button', { name: 'אישור' }), 20_000);
     // 24. Return to the parent proposals screen with Esc
     await expect(async () => {
-      await clearObstructions();
+      await clearObstructions(page);
       await page.keyboard.press('Escape');
       await expect(detailTitle).toBeHidden({ timeout: 5_000 });
       await expect(proposalsTitle).toBeVisible({ timeout: 5_000 });
     }).toPass({ timeout: 60_000 });
-    // 25. Change the proposal status from draft to ready
+    // 25. Set the proposal status to ready; skip the edit if a prior run already set it
     const statusField = labeledField(page, 'סטטוס');
-    await expect(statusField).toHaveValue('טיוטא', { timeout: 30_000 });
-    await statusField.click();
-    await statusField.press('Control+a');
-    await statusField.pressSequentially('מוכנה');
-    // 26. Move one row down with the arrow so the status change is committed
-    await statusField.press('ArrowDown');
-    await dismissIfShown(messageDialog.getByRole('button', { name: 'אישור' }), 10_000);
+    await expect(statusField).toBeVisible({ timeout: 30_000 });
+    if ((await statusField.inputValue()) !== 'מוכנה') {
+      await statusField.click();
+      await statusField.press('Control+a');
+      await statusField.pressSequentially('מוכנה');
+      // 26. Move one row down with the arrow so the status change is committed
+      await statusField.press('ArrowDown');
+      await dismissIfShown(messageDialog.getByRole('button', { name: 'אישור' }), 10_000);
+    }
     await expect(statusField).toHaveValue('מוכנה', { timeout: 30_000 });
-    // Manual review pause - inspect the result in headed Chromium before finishing
-    await page.pause();
   });
 });

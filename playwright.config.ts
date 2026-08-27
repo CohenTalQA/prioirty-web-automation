@@ -3,10 +3,12 @@ import { env } from './src/utils/env.js';
 
 export default defineConfig({
   testDir: './tests',
-  fullyParallel: true,
+  // Priority allows a single session per user, and flows are ordered (admin grants
+  // permissions before the doctor flow runs), so tests must run serially.
+  fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1,
   timeout: 45_000,
   expect: { timeout: 10_000 },
   reporter: [
