@@ -12,3 +12,6 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# Playwright MCP browser exploration artifacts
+.playwright-mcp/
